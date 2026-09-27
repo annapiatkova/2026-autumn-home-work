@@ -60,6 +60,7 @@ class HandlerImpl implements HttpHandler {
             break;
         default:
             sendResponse(exchange, HTTP_UNPROCESSABLE_CONTENT);
+            break;
         }
     }
 
