@@ -48,16 +48,16 @@ class HandlerImpl implements HttpHandler {
         switch (method) {
         case "GET":
             handleGet(exchange, path);
-            return;
+            break;
         case "POST":
             handlePost(exchange, path);
-            return;
+            break;
         case "PUT":
             handlePut(exchange, path);
-            return;
+            break;
         case "DELETE":
             handleDelete(exchange, path);
-            return;
+            break;
         default:
             sendResponse(exchange, HTTP_UNPROCESSABLE_CONTENT);
         }
