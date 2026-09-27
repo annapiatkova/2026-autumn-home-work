@@ -23,6 +23,10 @@ class HandlerImpl implements HttpHandler {
     static final int HTTP_UNAUTHORIZED = 401;
     static final int HTTP_NOT_FOUND = 404;
     static final int HTTP_UNPROCESSABLE_CONTENT = 422;
+    static final String STATUS_PATH = "/v0/status";
+    static final String LINKS_PATH = "/v0/links";
+    static final String LINKS_PREFIX = "/v0/links/";
+    static final String USERS_PATH = "/internal/users";
     String linkPrefix;
     Dao<String> dao;
     AlphaNumericStringGenerator gen;
@@ -72,18 +76,17 @@ class HandlerImpl implements HttpHandler {
         String username = userPass[0];
         String password = userPass[1];
 
-        //boolean authenticated = checkCredentials(username, password);
         return auth.checkCredentials(username, password);
     }
 
     void handleGet(HttpExchange exchange, String path) throws IOException {
-        if ("/v0/status".equals(path)) {
+        if (STATUS_PATH.equals(path)) {
             sendResponse(exchange, HTTP_OK);
-        } else if (path.startsWith("/v0/links/")) {
+        } else if (path.startsWith(LINKS_PREFIX)) {
             if (!authenticate(exchange)) {
                 sendResponse(exchange, HTTP_UNAUTHORIZED);
             }
-            String id = path.substring("/v0/links/".length());
+            String id = path.substring(LINKS_PREFIX.length());
             if (!validateIdString(id)) {
                 sendResponse(exchange, HTTP_UNPROCESSABLE_CONTENT);
                 return;
@@ -111,9 +114,10 @@ class HandlerImpl implements HttpHandler {
     }
 
     void handlePost(HttpExchange exchange, String path) throws IOException {
-        if ("/internal/users".equals(path)) {
+        if (USERS_PATH.equals(path)) {
             InputStream is = exchange.getRequestBody();
             String credentials = new String(is.readAllBytes());
+            is.close();
             String[] splitResult = credentials.split(":");
             String username = splitResult[0];
             String password = splitResult[1];
@@ -123,7 +127,7 @@ class HandlerImpl implements HttpHandler {
         if (!authenticate(exchange)) {
             sendResponse(exchange, HTTP_UNAUTHORIZED);
         }
-        if ("/v0/links".equals(path)) {
+        if (LINKS_PATH.equals(path)) {
             InputStream is = exchange.getRequestBody();
             String longLink = new String(is.readAllBytes());
             if (!isValidURL(longLink)) {
@@ -142,8 +146,8 @@ class HandlerImpl implements HttpHandler {
         if (!authenticate(exchange)) {
             sendResponse(exchange, HTTP_UNAUTHORIZED);
         }
-        if (path.startsWith("/v0/links/")) {
-            String id = path.substring("/v0/links/".length());
+        if (path.startsWith(LINKS_PREFIX)) {
+            String id = path.substring(LINKS_PREFIX.length());
             if (!validateIdString(id)) {
                 sendResponse(exchange, HTTP_UNPROCESSABLE_CONTENT);
                 return;
@@ -170,8 +174,8 @@ class HandlerImpl implements HttpHandler {
         if (!authenticate(exchange)) {
             sendResponse(exchange, HTTP_UNAUTHORIZED);
         }
-        if (path.startsWith("/v0/links/")) {
-            String id = path.substring("/v0/links/".length());
+        if (path.startsWith(LINKS_PREFIX)) {
+            String id = path.substring(LINKS_PREFIX.length());
             if (!validateIdString(id)) {
                 sendResponse(exchange, HTTP_UNPROCESSABLE_CONTENT);
                 return;
@@ -192,9 +196,9 @@ class HandlerImpl implements HttpHandler {
     void sendResponse(HttpExchange exchange, int code, String content) throws IOException {
         exchange.getResponseHeaders().add("Content-Type", "text/html; charset=utf-8");
         exchange.sendResponseHeaders(code, content.length());
-        OutputStream os = exchange.getResponseBody();
-        os.write(content.getBytes());
-        os.close();
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(content.getBytes());
+        }
     }
 
     public static boolean isValidURL(String urlString) {
