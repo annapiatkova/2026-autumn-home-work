@@ -115,28 +115,30 @@ class HandlerImpl implements HttpHandler {
 
     void handlePost(HttpExchange exchange, String path) throws IOException {
         if (USERS_PATH.equals(path)) {
-            InputStream is = exchange.getRequestBody();
-            String credentials = new String(is.readAllBytes());
-            is.close();
-            String[] splitResult = credentials.split(":");
-            String username = splitResult[0];
-            String password = splitResult[1];
-            auth.addUser(username, password);
-            sendResponse(exchange, HTTP_OK);
+            try (InputStream is = exchange.getRequestBody()) {
+                String credentials = new String(is.readAllBytes());
+                String[] splitResult = credentials.split(":");
+                String username = splitResult[0];
+                String password = splitResult[1];
+                auth.addUser(username, password);
+                sendResponse(exchange, HTTP_OK);
+            }
+            return;
         }
         if (!authenticate(exchange)) {
             sendResponse(exchange, HTTP_UNAUTHORIZED);
         }
         if (LINKS_PATH.equals(path)) {
-            InputStream is = exchange.getRequestBody();
-            String longLink = new String(is.readAllBytes());
-            if (!isValidURL(longLink)) {
-                sendResponse(exchange, HTTP_UNPROCESSABLE_CONTENT);
-                return;
+            try (InputStream is = exchange.getRequestBody()) {
+                String longLink = new String(is.readAllBytes());
+                if (!isValidURL(longLink)) {
+                    sendResponse(exchange, HTTP_UNPROCESSABLE_CONTENT);
+                    return;
+                }
+                String id = gen.generate();
+                dao.upsert(id, longLink);
+                sendResponse(exchange, HTTP_CREATED, linkPrefix + "/" + id);
             }
-            String id = gen.generate();
-            dao.upsert(id, longLink);
-            sendResponse(exchange, HTTP_CREATED, linkPrefix + "/" + id);
             return;
         }
         sendResponse(exchange, HTTP_UNPROCESSABLE_CONTENT);
@@ -157,14 +159,15 @@ class HandlerImpl implements HttpHandler {
                 sendResponse(exchange, HTTP_NOT_FOUND);
                 return;
             }
-            InputStream is = exchange.getRequestBody();
-            String newLink = new String(is.readAllBytes());
-            if (!isValidURL(newLink)) {
-                sendResponse(exchange, HTTP_UNPROCESSABLE_CONTENT);
-                return;
+            try (InputStream is = exchange.getRequestBody()) {
+                String newLink = new String(is.readAllBytes());
+                if (!isValidURL(newLink)) {
+                    sendResponse(exchange, HTTP_UNPROCESSABLE_CONTENT);
+                    return;
+                }
+                dao.upsert(id, newLink);
+                sendResponse(exchange, HTTP_OK);
             }
-            dao.upsert(id, newLink);
-            sendResponse(exchange, HTTP_OK);
             return;
         }
         sendResponse(exchange, HTTP_UNPROCESSABLE_CONTENT);
@@ -189,8 +192,9 @@ class HandlerImpl implements HttpHandler {
 
     void sendResponse(HttpExchange exchange, int code) throws IOException {
         exchange.sendResponseHeaders(code, 0);
-        OutputStream os = exchange.getResponseBody();
-        os.close();
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write("".getBytes());
+        }
     }
 
     void sendResponse(HttpExchange exchange, int code, String content) throws IOException {
