@@ -44,7 +44,10 @@ class HandlerImpl implements HttpHandler {
         String method = exchange.getRequestMethod();
         URI uri = exchange.getRequestURI();
         String path = uri.getPath();
-
+        if (needsAuthentication(method, path) && !authenticate(exchange)) {
+            sendResponse(exchange, HTTP_UNAUTHORIZED);
+            return;
+        }
         switch (method) {
         case "GET":
             handleGet(exchange, path);
@@ -64,29 +67,43 @@ class HandlerImpl implements HttpHandler {
         }
     }
 
-    boolean authenticate(HttpExchange exchange) throws IOException {
+    private boolean needsAuthentication(String method, String path) {
+        /*
+        No authentication for GET /v0/status, GET /<ID>, and POST /internal/users
+        */
+        if ("GET".equals(method)) {
+            return path.startsWith(LINKS_PREFIX);
+        } else if ("POST".equals(method)) {
+            return !USERS_PATH.equals(path);
+        }
+        return true;
+    }
+
+    private boolean authenticate(HttpExchange exchange) throws IOException {
         String authHeader = exchange.getRequestHeaders().getFirst("Authorization");
         if (authHeader == null) {
             return false;
         }
-        String[] split = authHeader.split("\\s");
+        String[] split = authHeader.split("\s", 2);
         String credentials = split[1];
-        String decoded = new String(Base64.getDecoder().decode(credentials));
-        String[] userPass = decoded.split(":");
+        try {
+            String decoded = new String(Base64.getDecoder().decode(credentials));
+            String[] userPass = decoded.split(":", 2);
 
-        String username = userPass[0];
-        String password = userPass[1];
+            String username = userPass[0];
+            String password = userPass[1];
 
-        return auth.checkCredentials(username, password);
+            return auth.checkCredentials(username, password);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 
-    void handleGet(HttpExchange exchange, String path) throws IOException {
+    private void handleGet(HttpExchange exchange, String path) throws IOException {
         if (STATUS_PATH.equals(path)) {
             sendResponse(exchange, HTTP_OK);
+            return;
         } else if (path.startsWith(LINKS_PREFIX)) {
-            if (!authenticate(exchange)) {
-                sendResponse(exchange, HTTP_UNAUTHORIZED);
-            }
             String id = path.substring(LINKS_PREFIX.length());
             if (!validateIdString(id)) {
                 sendResponse(exchange, HTTP_UNPROCESSABLE_CONTENT);
@@ -114,8 +131,8 @@ class HandlerImpl implements HttpHandler {
         sendResponse(exchange, HTTP_MOVED_PERMANENTLY);
     }
 
-    void handlePost(HttpExchange exchange, String path) throws IOException {
-        if (USERS_PATH.equals(path)) {
+    private void handlePost(HttpExchange exchange, String path) throws IOException {
+        if (USERS_PATH.equals(path)) { 
             try (InputStream is = exchange.getRequestBody()) {
                 String credentials = new String(is.readAllBytes());
                 String[] splitResult = credentials.split(":");
@@ -125,9 +142,6 @@ class HandlerImpl implements HttpHandler {
                 sendResponse(exchange, HTTP_OK);
             }
             return;
-        }
-        if (!authenticate(exchange)) {
-            sendResponse(exchange, HTTP_UNAUTHORIZED);
         }
         if (LINKS_PATH.equals(path)) {
             try (InputStream is = exchange.getRequestBody()) {
@@ -145,10 +159,7 @@ class HandlerImpl implements HttpHandler {
         sendResponse(exchange, HTTP_UNPROCESSABLE_CONTENT);
     }
 
-    void handlePut(HttpExchange exchange, String path) throws IOException {
-        if (!authenticate(exchange)) {
-            sendResponse(exchange, HTTP_UNAUTHORIZED);
-        }
+    private void handlePut(HttpExchange exchange, String path) throws IOException {
         if (path.startsWith(LINKS_PREFIX)) {
             String id = path.substring(LINKS_PREFIX.length());
             if (!validateIdString(id)) {
@@ -174,10 +185,7 @@ class HandlerImpl implements HttpHandler {
         sendResponse(exchange, HTTP_UNPROCESSABLE_CONTENT);
     }
 
-    void handleDelete(HttpExchange exchange, String path) throws IOException {
-        if (!authenticate(exchange)) {
-            sendResponse(exchange, HTTP_UNAUTHORIZED);
-        }
+    private void handleDelete(HttpExchange exchange, String path) throws IOException {
         if (path.startsWith(LINKS_PREFIX)) {
             String id = path.substring(LINKS_PREFIX.length());
             if (!validateIdString(id)) {
@@ -191,14 +199,14 @@ class HandlerImpl implements HttpHandler {
         sendResponse(exchange, HTTP_UNPROCESSABLE_CONTENT);
     }
 
-    void sendResponse(HttpExchange exchange, int code) throws IOException {
+    private void sendResponse(HttpExchange exchange, int code) throws IOException {
         exchange.sendResponseHeaders(code, 0);
         try (OutputStream os = exchange.getResponseBody()) {
             os.write("".getBytes());
         }
     }
 
-    void sendResponse(HttpExchange exchange, int code, String content) throws IOException {
+    private void sendResponse(HttpExchange exchange, int code, String content) throws IOException {
         exchange.getResponseHeaders().add("Content-Type", "text/html; charset=utf-8");
         exchange.sendResponseHeaders(code, content.length());
         try (OutputStream os = exchange.getResponseBody()) {
@@ -206,7 +214,7 @@ class HandlerImpl implements HttpHandler {
         }
     }
 
-    public static boolean isValidURL(String urlString) {
+    private static boolean isValidURL(String urlString) {
         try {
             URL url = new URL(urlString);
             url.toURI();
@@ -216,13 +224,13 @@ class HandlerImpl implements HttpHandler {
         }
     }
 
-    static boolean validateIdString(String id) {
+    private static boolean validateIdString(String id) {
         return id.length() == ID_LENGTH && id.matches(ALPHA_NUMERIC_PATTERN);
     }
 
-    class AlphaNumericStringGenerator {
+    private class AlphaNumericStringGenerator {
         static final String ALPHA_NUMERIC_SYMBOLS = "QWERTYUIOPASDFGHJKLZXCVBNMqwertyuiopasdfghjklzxcvbnm1234567890";
-        PrimitiveIterator.OfInt iter;
+        final PrimitiveIterator.OfInt iter;
 
         AlphaNumericStringGenerator() {
             Random random = new Random();
