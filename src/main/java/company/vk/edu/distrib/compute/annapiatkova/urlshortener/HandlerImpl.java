@@ -208,9 +208,10 @@ class HandlerImpl implements HttpHandler {
 
     private void sendResponse(HttpExchange exchange, int code, String content) throws IOException {
         exchange.getResponseHeaders().add("Content-Type", "text/html; charset=utf-8");
-        exchange.sendResponseHeaders(code, content.length());
+        byte[] contentBytes = content.getBytes();
+        exchange.sendResponseHeaders(code, contentBytes.length);
         try (OutputStream os = exchange.getResponseBody()) {
-            os.write(content.getBytes());
+            os.write(contentBytes);
         }
     }
 
