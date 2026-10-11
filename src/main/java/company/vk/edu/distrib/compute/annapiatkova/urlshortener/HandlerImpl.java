@@ -81,20 +81,17 @@ class HandlerImpl implements HttpHandler {
 
     private boolean authenticate(HttpExchange exchange) throws IOException {
         String authHeader = exchange.getRequestHeaders().getFirst("Authorization");
-        if (authHeader == null) {
+        if (authHeader == null || !authHeader.matches("Basic\s.*")) {
             return false;
         }
         String[] split = authHeader.split("\s", 2);
-        if (split.length <= 1) {
-            return false;
-        }
         String credentials = split[1];
         try {
             String decoded = new String(Base64.getDecoder().decode(credentials));
-            String[] userPass = decoded.split(":", 2);
-            if (userPass.length <= 1) {
+            if (!decoded.matches(".*:.*")) {
                 return false;
             }
+            String[] userPass = decoded.split(":", 2);
             String username = userPass[0];
             String password = userPass[1];
             return auth.checkCredentials(username, password);
