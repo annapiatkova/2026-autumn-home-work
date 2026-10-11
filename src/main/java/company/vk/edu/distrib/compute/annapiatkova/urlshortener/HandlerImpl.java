@@ -85,14 +85,18 @@ class HandlerImpl implements HttpHandler {
             return false;
         }
         String[] split = authHeader.split("\s", 2);
+        if (split.length != 2) {
+            return false;
+        }
         String credentials = split[1];
         try {
             String decoded = new String(Base64.getDecoder().decode(credentials));
             String[] userPass = decoded.split(":", 2);
-
+            if (userPass.length != 2) {
+                return false;
+            }
             String username = userPass[0];
             String password = userPass[1];
-
             return auth.checkCredentials(username, password);
         } catch (IllegalArgumentException e) {
             return false;
