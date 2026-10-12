@@ -5,7 +5,7 @@ import company.vk.edu.distrib.compute.Dao;
 import java.io.IOException;
 
 class Authenticator {
-    Dao<String> users;
+    private final Dao<String> users;
 
     Authenticator() {
         users = new DaoImpl();
