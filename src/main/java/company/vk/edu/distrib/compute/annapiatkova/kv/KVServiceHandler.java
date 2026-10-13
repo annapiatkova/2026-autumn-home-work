@@ -44,33 +44,42 @@ class KVServiceHandler implements HttpHandler {
                 return;
             }
             switch (method) {
-            case GET: {
-                try {
-                    byte[] data = dao.get(id);
-                    sendResponse(exchange, HTTP_OK, data);
-                    return;
-                } catch (NoSuchElementException e) {
-                    sendResponse(exchange, HTTP_NOT_FOUND);
-                    return;
-                }
-            }
-            case PUT: {
-                try (InputStream is = exchange.getRequestBody()) {
-                    byte[] data = is.readAllBytes();
-                    dao.upsert(id, data);
-                }
-                sendResponse(exchange, HTTP_CREATED);
+            case GET:
+                handleGet(exchange, id);
                 return;
-            }
+            case PUT:
+                handlePut(exchange, id);
+                return;
             case DELETE:
-                dao.delete(id);
-                sendResponse(exchange, HTTP_ACCEPTED);
+                handleDelete(exchange, id);
                 return;
             default:
                 break;
             }
         }
-        sendResponse(exchange, 404);
+        sendResponse(exchange, HTTP_NOT_FOUND);
+    }
+
+    private void handleGet(HttpExchange exchange, String id) throws IOException {
+        try {
+            byte[] data = dao.get(id);
+            sendResponse(exchange, HTTP_OK, data);
+        } catch (NoSuchElementException e) {
+            sendResponse(exchange, HTTP_NOT_FOUND);
+        }
+    }
+
+    private void handlePut(HttpExchange exchange, String id) throws IOException {
+        try (InputStream is = exchange.getRequestBody()) {
+            byte[] data = is.readAllBytes();
+            dao.upsert(id, data);
+        }
+        sendResponse(exchange, HTTP_CREATED);
+    }
+
+    private void handleDelete(HttpExchange exchange, String id) throws IOException {
+        dao.delete(id);
+        sendResponse(exchange, HTTP_ACCEPTED);
     }
 
     private void sendResponse(HttpExchange exchange, int code) throws IOException {

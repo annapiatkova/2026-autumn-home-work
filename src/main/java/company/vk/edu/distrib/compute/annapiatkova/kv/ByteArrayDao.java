@@ -37,9 +37,7 @@ class ByteArrayDao implements Dao<byte[]> {
             if (op[0] == PUT) {
                 String key = istr.readUTF();
                 int length = istr.readInt();
-                byte[] value = new byte[length];
-                istr.read(value, 0, length);
-                values.put(key, value);
+                values.put(key, readBytes(istr, length));
             } else if (op[0] == DELETE) {
                 String key = istr.readUTF();
                 values.remove(key);
@@ -47,6 +45,12 @@ class ByteArrayDao implements Dao<byte[]> {
                 throw new IOException("Malformed log file");
             }
         }
+    }
+
+    private byte[] readBytes(DataInputStream istr, int n) throws IOException {
+        byte[] value = new byte[n];
+        istr.read(value, 0, n);
+        return value;
     }
 
     @Override
