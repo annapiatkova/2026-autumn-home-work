@@ -24,9 +24,10 @@ class ByteArrayDao implements Dao<byte[]> {
         if (!Files.exists(path)) {
             Files.createFile(path);
         }
-        DataInputStream istr = new DataInputStream(Files.newInputStream(path));
-        readDataFromFile(istr);
-        istr.close();
+        try (DataInputStream istr = new DataInputStream(Files.newInputStream(path))) {
+            readDataFromFile(istr);
+            istr.close();
+        }
         ostr = new DataOutputStream(Files.newOutputStream(path, StandardOpenOption.APPEND));
     }
 
@@ -43,7 +44,7 @@ class ByteArrayDao implements Dao<byte[]> {
                 String key = istr.readUTF();
                 values.remove(key);
             } else {
-                throw new RuntimeException("Malformed log file");
+                throw new IOException("Malformed log file");
             }
         }
     }
