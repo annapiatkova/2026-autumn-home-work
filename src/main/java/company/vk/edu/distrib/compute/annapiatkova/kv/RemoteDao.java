@@ -25,12 +25,12 @@ class RemoteDao implements Dao<String> {
             .uri(createURI(port, key))
             .GET()
             .build();
-        HttpResponse.BodyHandler<byte[]> bodyHandler = HttpResponse.BodyHandlers.ofByteArray();
+        HttpResponse.BodyHandler<String> bodyHandler = HttpResponse.BodyHandlers.ofString();
         while (true) {
             try {
-                HttpResponse<byte[]> response = client.send(request, bodyHandler);
+                HttpResponse<String> response = client.send(request, bodyHandler);
                 if (response.statusCode() == HTTP_OK) {
-                    return new String(response.body());
+                    return response.body();
                 }
                 throw new NoSuchElementException();
             } catch (InterruptedException e) {
@@ -45,7 +45,7 @@ class RemoteDao implements Dao<String> {
             .uri(createURI(port, key))
             .PUT(HttpRequest.BodyPublishers.ofString(value))
             .build();
-        HttpResponse.BodyHandler<byte[]> bodyHandler = HttpResponse.BodyHandlers.ofByteArray();
+        HttpResponse.BodyHandler<Void> bodyHandler = HttpResponse.BodyHandlers.discarding();
         while (true) {
             try {
                 client.send(request, bodyHandler);
@@ -62,7 +62,7 @@ class RemoteDao implements Dao<String> {
             .uri(createURI(port, key))
             .DELETE()
             .build();
-        HttpResponse.BodyHandler<byte[]> bodyHandler = HttpResponse.BodyHandlers.ofByteArray();
+        HttpResponse.BodyHandler<Void> bodyHandler = HttpResponse.BodyHandlers.discarding();
         while (true) {
             try {
                 client.send(request, bodyHandler);
