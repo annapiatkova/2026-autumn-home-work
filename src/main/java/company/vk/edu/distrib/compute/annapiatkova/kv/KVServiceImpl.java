@@ -14,7 +14,7 @@ class KVServiceImpl implements KVService {
     KVServiceHandler handler;
 
     KVServiceImpl(int port) throws IOException {
-        Path path = Paths.get("/tmp/dao-log.tmp");
+        Path path = Paths.get("/tmp/dao-log-port-" + port + ".tmp");
         handler = new KVServiceHandler(new ByteArrayDao(path));
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
         server.createContext("/", handler);
