@@ -12,11 +12,7 @@ import java.util.NoSuchElementException;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.net.http.HttpResponse;
-import java.net.http.HttpClient;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeoutException;
 
 class ReplicatedKVServiceHandler implements HttpHandler {
     static final String STATUS = "/v0/status";
@@ -37,7 +33,6 @@ class ReplicatedKVServiceHandler implements HttpHandler {
     Dao<byte[]> dao;
     RequestCoordinator coordinator;
     int port;
-    HttpClient client = HttpClient.newHttpClient();
 
     ReplicatedKVServiceHandler(Dao<byte[]> dao, int port) {
         this.dao = dao;
@@ -62,20 +57,28 @@ class ReplicatedKVServiceHandler implements HttpHandler {
         sendResponse(exchange, HTTP_NOT_FOUND);
     }
 
-    private void handleRemote(HttpExchange exchange, String method, String path) throws IOException {
+    private boolean validateRequest(String path) {
         String[] args = path.substring(ENTITY_PREFIX.length(), path.length()).split("&");
         if (args.length == 0 || !args[0].startsWith(ID_PREFIX) || args[0].length() == ID_PREFIX.length()) {
-            sendResponse(exchange, HTTP_BAD_REQUEST);
-            return;
+            return false;
         }
+        if (args.length > 1 && args[1].startsWith(ACK_PREFIX)) {
+            int ack = Integer.parseInt(args[1].substring(ACK_PREFIX.length(), args[1].length()));
+            return coordinator.validateAck(ack);
+        }
+        return true;
+    }
+
+    private void handleRemote(HttpExchange exchange, String method, String path) throws IOException {
+        if (!validateRequest(path)) {
+            sendResponse(exchange, HTTP_BAD_REQUEST);
+            return;            
+        }
+        String[] args = path.substring(ENTITY_PREFIX.length(), path.length()).split("&");
         String id = args[0].substring(ID_PREFIX.length(), args[0].length());
         int ack = 1;
         if (args.length > 1 && args[1].startsWith(ACK_PREFIX)) {
             ack = Integer.parseInt(args[1].substring(ACK_PREFIX.length(), args[1].length()));
-        }
-        if (!coordinator.validateAck(ack)) {
-            sendResponse(exchange, HTTP_BAD_REQUEST);
-            return;
         }
         switch (method) {
         case GET:
@@ -135,34 +138,6 @@ class ReplicatedKVServiceHandler implements HttpHandler {
         sendResponse(exchange, HTTP_ACCEPTED);
     }
 
-    class Result {
-        int acks;
-        byte[] value;
-    }
-
-    private Result handleGetResponses(List<CompletableFuture<HttpResponse<byte[]>>> responses, int repliesCount) {
-        Result res = new Result();
-        res.acks = repliesCount;
-        for (CompletableFuture<HttpResponse<byte[]>> responseFuture : responses) {
-            try {
-                HttpResponse<byte[]> response = responseFuture.get(100, TimeUnit.MILLISECONDS);
-                res.acks += 1;
-                if (response.statusCode() != HTTP_OK) {
-                    continue;
-                }
-                byte[] body = response.body();
-                if (body != null) {
-                    res.value = body;
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } catch (ExecutionException | TimeoutException e) {
-                //
-            }
-        }
-        return res;
-    }
-
     private void handleGet(HttpExchange exchange, String id, int ack) throws IOException {
         int repliesCount = 0;
         byte[] value;
@@ -176,16 +151,13 @@ class ReplicatedKVServiceHandler implements HttpHandler {
                 } catch (NoSuchElementException e) {
                     repliesCount += 1;
                 } catch (IOException e) {
-                    //
+                    continue;
                 }
                 continue;
             }
-            responses.add(
-                this.client
-                    .sendAsync(coordinator.get(port, id), HttpResponse.BodyHandlers.ofByteArray())
-            );
+            responses.add(coordinator.sendGet(port, id));
         }
-        Result res = handleGetResponses(responses, repliesCount);
+        RequestCoordinator.Result res = RequestCoordinator.handleGetResponses(responses, repliesCount);
         repliesCount = res.acks;
         value = res.value;
         if (repliesCount < ack) {
@@ -211,27 +183,13 @@ class ReplicatedKVServiceHandler implements HttpHandler {
                         dao.upsert(id, data);
                         repliesCount += 1;
                     } catch (IOException e) {
-                        //
+                        continue;
                     }
                     continue;
                 }
-                responses.add(
-                    this.client
-                        .sendAsync(coordinator.put(port, id, data), HttpResponse.BodyHandlers.ofByteArray())
-                );
+                responses.add(coordinator.sendPut(port, id, data));
             }
-            for (CompletableFuture<HttpResponse<byte[]>> responseFuture : responses) {
-                try {
-                    HttpResponse<byte[]> response = responseFuture.get(100, TimeUnit.MILLISECONDS);
-                    if (response.statusCode() == HTTP_CREATED) {
-                        repliesCount += 1;
-                    }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                } catch (ExecutionException | TimeoutException e) {
-                    //
-                }
-            }
+            repliesCount += RequestCoordinator.handlePutResponses(responses);
             if (repliesCount < ack) {
                 sendResponse(exchange, HTTP_SERVICE_UNAVAILABLE);
                 return;
@@ -250,27 +208,13 @@ class ReplicatedKVServiceHandler implements HttpHandler {
                     dao.delete(id);
                     repliesCount += 1;
                 } catch (IOException e) {
-                    //
+                    continue;
                 }
                 continue;
             }
-            responses.add(
-                this.client
-                    .sendAsync(coordinator.delete(port, id), HttpResponse.BodyHandlers.ofByteArray())
-            );
+            responses.add(coordinator.sendDelete(port, id));
         }
-        for (CompletableFuture<HttpResponse<byte[]>> responseFuture : responses) {
-            try {
-                HttpResponse<byte[]> response = responseFuture.get(100, TimeUnit.MILLISECONDS);
-                if (response.statusCode() == HTTP_ACCEPTED) {
-                    repliesCount += 1;
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } catch (ExecutionException | TimeoutException e) {
-                //
-            }
-        }
+        repliesCount += RequestCoordinator.handleDeleteResponses(responses);
         if (repliesCount < ack) {
             sendResponse(exchange, HTTP_SERVICE_UNAVAILABLE);
             return;

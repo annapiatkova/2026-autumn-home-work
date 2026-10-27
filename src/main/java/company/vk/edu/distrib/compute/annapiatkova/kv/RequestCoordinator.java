@@ -5,6 +5,12 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.ArrayList;
+import java.net.http.HttpResponse;
+import java.net.http.HttpClient;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.TimeUnit;
 
 class RequestCoordinator {
     static final String REPLICA_PREFIX = "/v0/replica?";
@@ -17,9 +23,11 @@ class RequestCoordinator {
     private RendezvousHashRing hashRing;
     private List<Integer> clusterPorts;
     private int replicationFactor;
+    private final HttpClient client = HttpClient.newHttpClient();
 
-    RequestCoordinator() {
-        this.hashRing = null;
+    static class Result {
+        int acks;
+        byte[] value;
     }
 
     public boolean validateAck(int ack) {
@@ -29,7 +37,79 @@ class RequestCoordinator {
         return ack >= 1 && ack <= this.replicationFactor;
     }
 
-    HttpRequest get(int port, String id) {
+    CompletableFuture<HttpResponse<byte[]>> sendGet(int port, String id) {
+        return this.client
+            .sendAsync(this.get(port, id), HttpResponse.BodyHandlers.ofByteArray());
+    }
+
+    CompletableFuture<HttpResponse<byte[]>> sendPut(int port, String id, byte[] data) {
+        return this.client
+            .sendAsync(this.put(port, id, data), HttpResponse.BodyHandlers.ofByteArray());
+    }
+
+    CompletableFuture<HttpResponse<byte[]>> sendDelete(int port, String id) {
+        return this.client
+            .sendAsync(this.delete(port, id), HttpResponse.BodyHandlers.ofByteArray());
+    }
+
+    static Result handleGetResponses(List<CompletableFuture<HttpResponse<byte[]>>> responses, int repliesCount) {
+        Result res = new Result();
+        res.acks = repliesCount;
+        for (CompletableFuture<HttpResponse<byte[]>> responseFuture : responses) {
+            try {
+                HttpResponse<byte[]> response = responseFuture.get(100, TimeUnit.MILLISECONDS);
+                res.acks += 1;
+                if (response.statusCode() != HTTP_OK) {
+                    continue;
+                }
+                byte[] body = response.body();
+                if (body != null) {
+                    res.value = body;
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (ExecutionException | TimeoutException e) {
+                continue;
+            }
+        }
+        return res;
+    }
+
+    static int handlePutResponses(List<CompletableFuture<HttpResponse<byte[]>>> responses) {
+        int repliesCount = 0;
+        for (CompletableFuture<HttpResponse<byte[]>> responseFuture : responses) {
+            try {
+                HttpResponse<byte[]> response = responseFuture.get(100, TimeUnit.MILLISECONDS);
+                if (response.statusCode() == HTTP_CREATED) {
+                    repliesCount += 1;
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (ExecutionException | TimeoutException e) {
+                continue;
+            }
+        }
+        return repliesCount;
+    }
+
+    static int handleDeleteResponses(List<CompletableFuture<HttpResponse<byte[]>>> responses) {
+        int repliesCount = 0;
+        for (CompletableFuture<HttpResponse<byte[]>> responseFuture : responses) {
+            try {
+                HttpResponse<byte[]> response = responseFuture.get(100, TimeUnit.MILLISECONDS);
+                if (response.statusCode() == HTTP_ACCEPTED) {
+                    repliesCount += 1;
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (ExecutionException | TimeoutException e) {
+                continue;
+            }
+        }
+        return repliesCount;
+    }
+
+    private HttpRequest get(int port, String id) {
         return HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:" + port + REPLICA_PREFIX + ID_PREFIX + id))
             .timeout(Duration.ofMillis(100))
@@ -37,7 +117,7 @@ class RequestCoordinator {
             .build();
     }
 
-    HttpRequest put(int port, String id, byte[] data) {
+    private HttpRequest put(int port, String id, byte[] data) {
         return HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:" + port + REPLICA_PREFIX + ID_PREFIX + id))
             .timeout(Duration.ofMillis(100))
@@ -45,7 +125,7 @@ class RequestCoordinator {
             .build();
     }
 
-    HttpRequest delete(int port, String id) {
+    private HttpRequest delete(int port, String id) {
         return HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:" + port + REPLICA_PREFIX + ID_PREFIX + id))
             .timeout(Duration.ofMillis(100))
@@ -77,9 +157,6 @@ class RequestCoordinator {
 
     private List<Integer> getClusterPorts() {
         String cluster = System.getProperty(CLUSTER_PROPERTY);
-        if (cluster == null) {
-            throw new RuntimeException("Cluster property not set");
-        }
         String[] ports = cluster.split(",");
         List<Integer> res = new ArrayList<>(ports.length);
         for (String port : ports) {
