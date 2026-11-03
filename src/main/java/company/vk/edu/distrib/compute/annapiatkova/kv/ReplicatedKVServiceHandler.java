@@ -9,6 +9,7 @@ import java.net.URI;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
@@ -96,7 +97,7 @@ class ReplicatedKVServiceHandler implements HttpHandler {
     }
 
     private void handleLocal(HttpExchange exchange, String method, String path) throws IOException {
-        String id = path.substring(REPLICA_PREFIX.length(), path.length());
+        String id = path.substring((REPLICA_PREFIX + ID_PREFIX).length(), path.length());
         if (id.length() == 0) {
             sendResponse(exchange, HTTP_BAD_REQUEST);
             return;
@@ -140,13 +141,13 @@ class ReplicatedKVServiceHandler implements HttpHandler {
 
     private void handleGet(HttpExchange exchange, String id, int ack) throws IOException {
         int repliesCount = 0;
-        byte[] value;
+        Optional<byte[]> value = Optional.empty();
         List<Integer> ports = coordinator.getReplicaPorts(id);
         List<CompletableFuture<HttpResponse<byte[]>>> responses = new ArrayList<>(ports.size());
         for (int port : ports) {
             if (port == this.port) {
                 try {
-                    dao.get(id); 
+                    value = Optional.of(dao.get(id));
                     repliesCount += 1;
                 } catch (NoSuchElementException e) {
                     repliesCount += 1;
@@ -159,13 +160,15 @@ class ReplicatedKVServiceHandler implements HttpHandler {
         }
         RequestCoordinator.Result res = RequestCoordinator.handleGetResponses(responses, repliesCount);
         repliesCount = res.acks;
-        value = res.value;
+        if (res.value != null) {
+            value = Optional.of(res.value);
+        }
         if (repliesCount < ack) {
             sendResponse(exchange, HTTP_SERVICE_UNAVAILABLE);
             return;
         }
-        if (value != null) {
-            sendResponse(exchange, HTTP_OK, value);
+        if (value.isPresent()) {
+            sendResponse(exchange, HTTP_OK, value.get());
         } else {
             sendResponse(exchange, HTTP_NOT_FOUND);
         }
