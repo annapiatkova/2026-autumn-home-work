@@ -13,12 +13,12 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
 
 class RequestCoordinator {
-    static final String REPLICA_PREFIX = "/v0/replica?";
-    static final String ID_PREFIX = "id=";
-    static final String CLUSTER_PROPERTY = "CLUSTER";
-    static final int HTTP_OK = 200;
-    static final int HTTP_CREATED = 201;
-    static final int HTTP_ACCEPTED = 202;
+    private static final String REPLICA_PREFIX = "/v0/replica?";
+    private static final String ID_PREFIX = "id=";
+    private static final String CLUSTER_PROPERTY = "CLUSTER";
+    private static final int HTTP_OK = 200;
+    private static final int HTTP_CREATED = 201;
+    private static final int HTTP_ACCEPTED = 202;
 
     private RendezvousHashRing hashRing;
     private List<Integer> clusterPorts;
