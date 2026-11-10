@@ -28,6 +28,10 @@ class KVServiceHandler implements HttpHandler {
         this.dao = dao;
     }
 
+    public void stop() throws IOException {
+        this.dao.close();
+    }
+
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         String method = exchange.getRequestMethod();

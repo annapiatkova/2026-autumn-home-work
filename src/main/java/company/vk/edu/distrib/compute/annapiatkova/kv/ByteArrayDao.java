@@ -89,8 +89,8 @@ class ByteArrayDao implements Dao<byte[]> {
     }
 
     @Override
-    public void close() {
-        //
+    public void close() throws IOException {
+        ostr.close();
     }
 
 }

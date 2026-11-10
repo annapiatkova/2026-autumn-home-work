@@ -10,8 +10,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 class KVServiceImpl implements KVService {
-    HttpServer server;
-    KVServiceHandler handler;
+    private final HttpServer server;
+    private final KVServiceHandler handler;
 
     KVServiceImpl(int port) throws IOException {
         Path path = Paths.get("/tmp/dao-log.tmp");
@@ -28,5 +28,10 @@ class KVServiceImpl implements KVService {
     @Override
     public void stop() {
         server.stop(1);
+        try {
+            handler.stop();
+        } catch (IOException e) {
+            //
+        }
     }
 }

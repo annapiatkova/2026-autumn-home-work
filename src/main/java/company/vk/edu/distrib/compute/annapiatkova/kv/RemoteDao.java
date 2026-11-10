@@ -10,9 +10,12 @@ import java.net.http.HttpResponse;
 import java.util.NoSuchElementException;
 
 class RemoteDao implements Dao<String> {
-    int port;
-    HttpClient client;
-    static final int HTTP_OK = 200;
+    private final int port;
+    private final HttpClient client;
+    private static final int HTTP_OK = 200;
+    private static final int HTTP_CREATED = 201;
+    private static final int HTTP_ACCEPTED = 202;
+    private static final int HTTP_NOT_FOUND = 404;
 
     RemoteDao(int... ports) throws IOException {
         port = ports[0];
@@ -32,9 +35,13 @@ class RemoteDao implements Dao<String> {
                 if (response.statusCode() == HTTP_OK) {
                     return response.body();
                 }
-                throw new NoSuchElementException();
+                if (response.statusCode() == HTTP_NOT_FOUND) {
+                    throw new NoSuchElementException();
+                }
+                throw new IOException("Unexpected status code: " + response.statusCode());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                throw new IOException("Interrupted while waiting for a response from the KV service", e);
             }
         }
     }
@@ -48,10 +55,14 @@ class RemoteDao implements Dao<String> {
         HttpResponse.BodyHandler<Void> bodyHandler = HttpResponse.BodyHandlers.discarding();
         while (true) {
             try {
-                client.send(request, bodyHandler);
+                HttpResponse response = client.send(request, bodyHandler);
+                if (response.statusCode() != HTTP_CREATED) {
+                    throw new IOException("Unexpected status code: " + response.statusCode());
+                }
                 break;
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                throw new IOException("Interrupted while waiting for a response from the KV service", e);
             }
         }
     }
@@ -65,10 +76,14 @@ class RemoteDao implements Dao<String> {
         HttpResponse.BodyHandler<Void> bodyHandler = HttpResponse.BodyHandlers.discarding();
         while (true) {
             try {
-                client.send(request, bodyHandler);
+                HttpResponse response = client.send(request, bodyHandler);
+                if (response.statusCode() != HTTP_ACCEPTED) {
+                    throw new IOException("Unexpected status code: " + response.statusCode());
+                }
                 break;
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                throw new IOException("Interrupted while waiting for a response from the KV service", e);
             }
         }
     }
