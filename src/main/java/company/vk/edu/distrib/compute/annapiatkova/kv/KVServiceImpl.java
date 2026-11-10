@@ -31,7 +31,7 @@ class KVServiceImpl implements KVService {
         try {
             handler.stop();
         } catch (IOException e) {
-            //
+            throw new RuntimeException("Failed to close the DAO", e);
         }
     }
 }
