@@ -6,6 +6,7 @@ import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.net.InetAddress;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
@@ -31,7 +32,7 @@ class KVServiceImpl implements KVService {
         try {
             handler.stop();
         } catch (IOException e) {
-            throw new RuntimeException("Failed to close the DAO", e);
+            throw new UncheckedIOException("Failed to close the DAO", e);
         }
     }
 }
