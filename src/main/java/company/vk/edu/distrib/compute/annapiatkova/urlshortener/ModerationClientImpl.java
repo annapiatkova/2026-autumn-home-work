@@ -24,11 +24,12 @@ class ModerationClientImpl implements ModerationClient {
     private final BlockingQueue<ProducerRecord<String, String>> queue = new LinkedBlockingQueue<>();
     private final ProducerWorker producerWorker;
     private final ConsumerWorker consumerWorker;
+    private static final String GROUP_ID = "moderation-client";
 
     ModerationClientImpl(Dao<String> dao, String bootstrapServers) {
         this.dao = dao;
         this.producerWorker = new ProducerWorker(KafkaUtils.getProducer(bootstrapServers));
-        this.consumerWorker = new ConsumerWorker(KafkaUtils.getConsumer(bootstrapServers, "moderation-client"));
+        this.consumerWorker = new ConsumerWorker(KafkaUtils.getConsumer(bootstrapServers, GROUP_ID));
     }
 
     @Override

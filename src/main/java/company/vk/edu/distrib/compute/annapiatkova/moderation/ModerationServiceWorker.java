@@ -23,15 +23,16 @@ import org.apache.kafka.common.errors.WakeupException;
 
 class ModerationServiceWorker implements Runnable {
     AtomicBoolean closed = new AtomicBoolean(false);
-    private final KafkaConsumer<String, String> consumer;
     private final KafkaProducer<String, String> producer;
+    private final KafkaConsumer<String, String> consumer;
     private final Set<String> bannedWords;
     private static final String DICTIONARY_PATH = "src/main/resources/moderation/banned_words.txt";
     private static final Locale LOCALE = new Locale("en");
+    private static final String GROUP_ID = "moderation-service";
 
     ModerationServiceWorker(String bootstrapServers) {
         this.producer = KafkaUtils.getProducer(bootstrapServers);
-        this.consumer = KafkaUtils.getConsumer(bootstrapServers, "moderation-service");
+        this.consumer = KafkaUtils.getConsumer(bootstrapServers, GROUP_ID);
         this.bannedWords = new HashSet<>();
         try (
             BufferedReader d = new BufferedReader(
@@ -53,8 +54,8 @@ class ModerationServiceWorker implements Runnable {
     @Override
     public void run() {
         try (
-            KafkaConsumer<String, String> consumer = this.consumer;
-            KafkaProducer<String, String> producer = this.producer
+            KafkaProducer<String, String> producer = this.producer;
+            KafkaConsumer<String, String> consumer = this.consumer
         ) {
             consumer.subscribe(Arrays.asList(KafkaUtils.LINKS_CREATED_TOPIC));
             while (!closed.get()) {
