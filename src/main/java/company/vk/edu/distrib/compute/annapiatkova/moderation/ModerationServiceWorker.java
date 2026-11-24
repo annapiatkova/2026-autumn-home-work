@@ -11,6 +11,7 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -26,21 +27,23 @@ class ModerationServiceWorker implements Runnable {
     private final KafkaProducer<String, String> producer;
     private final Set<String> bannedWords;
     private static final String DICTIONARY_PATH = "src/main/resources/moderation/banned_words.txt";
+    private static final Locale LOCALE = new Locale("en");
 
     ModerationServiceWorker(String bootstrapServers) {
         this.producer = KafkaUtils.getProducer(bootstrapServers);
         this.consumer = KafkaUtils.getConsumer(bootstrapServers, "moderation-service");
         this.bannedWords = new HashSet<>();
-        try {
+        try (
             BufferedReader d = new BufferedReader(
                 new InputStreamReader(Files.newInputStream(Paths.get(DICTIONARY_PATH)))
-            );
+            )
+        ) {
             while (true) {
                 String bannedWord = d.readLine();
                 if (bannedWord == null) {
                     break;
                 }
-                bannedWords.add(bannedWord.toLowerCase());
+                bannedWords.add(bannedWord.toLowerCase(LOCALE));
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -59,13 +62,7 @@ class ModerationServiceWorker implements Runnable {
                 for (ConsumerRecord<String, String> record : records) {
                     String id = record.key();
                     String link = record.value();
-                    producer.send(
-                        new ProducerRecord<>(
-                            KafkaUtils.LINKS_MODERATED_TOPIC,
-                            id,
-                            toString(containsBannedWords(link))
-                        )
-                    );                
+                    producer.send(moderate(id, link));
                 }
                 consumer.commitSync();
             }
@@ -81,8 +78,16 @@ class ModerationServiceWorker implements Runnable {
         consumer.wakeup();
     }
 
+    private ProducerRecord<String, String> moderate(String id, String link) {
+        return new ProducerRecord<>(
+            KafkaUtils.LINKS_MODERATED_TOPIC,
+            id,
+            toString(containsBannedWords(link))
+        );
+    }
+
     private boolean containsBannedWords(String link) {
-        String linkDecoded = URLDecoder.decode(link, StandardCharsets.UTF_8).toLowerCase();
+        String linkDecoded = URLDecoder.decode(link, StandardCharsets.UTF_8).toLowerCase(LOCALE);
         for (String bannedWord : bannedWords) {
             if (linkDecoded.contains(bannedWord)) {
                 return true;

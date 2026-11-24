@@ -127,6 +127,8 @@ class ModerationClientImpl implements ModerationClient {
     }
 
     class UncheckedInterruptedException extends RuntimeException {
+        private static final long serialVersionUID = 10L;
+
         public UncheckedInterruptedException(String message, Throwable cause) {
             super(message, cause);
         } 
