@@ -36,12 +36,14 @@ class HandlerImpl implements HttpHandler {
     Dao<String> dao;
     AlphaNumericStringGenerator gen;
     Authenticator auth;
+    ModerationClient moderationClient;
 
-    HandlerImpl(Dao<String> dao, String linkPrefix) {
+    HandlerImpl(Dao<String> dao, String linkPrefix, ModerationClient moderationClient) {
         this.dao = dao;
         this.linkPrefix = linkPrefix;
         this.gen = new AlphaNumericStringGenerator();
         this.auth = new Authenticator();
+        this.moderationClient = moderationClient;
     }
 
     @Override
@@ -155,6 +157,8 @@ class HandlerImpl implements HttpHandler {
                 String id = gen.generate();
                 dao.upsert(id, longLink);
                 sendResponse(exchange, HTTP_CREATED, linkPrefix + "/" + id);
+                // Send the newly created link to the moderation service
+                moderationClient.newLink(id, longLink);
             }
             return;
         }

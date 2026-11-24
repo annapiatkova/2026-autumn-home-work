@@ -14,6 +14,8 @@ public class UrlShortenerServiceImpl implements UrlShortenerService {
     HandlerImpl handler;
     Dao<String> dao;
     boolean started;
+    String bootstrapServers;
+    ModerationClient moderationClient;
 
     UrlShortenerServiceImpl(int port) throws IOException {
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
@@ -29,14 +31,21 @@ public class UrlShortenerServiceImpl implements UrlShortenerService {
         if (dao == null) {
             dao = new DaoImpl();
         }
-        handler = new HandlerImpl(dao, "http://localhost:" + port);
+        if (bootstrapServers != null) {
+            this.moderationClient = new ModerationClientImpl(dao, bootstrapServers);
+        } else {
+            this.moderationClient = new ModerationClientDummy();
+        }
+        this.moderationClient.start();
+        handler = new HandlerImpl(dao, "http://localhost:" + port, moderationClient);
         server.createContext("/", handler);
         server.start();
     }
 
     @Override
     public void stop() {
-        server.stop(1);
+        moderationClient.stop();
+        server.stop(0);
     }
 
     @Override
@@ -45,5 +54,10 @@ public class UrlShortenerServiceImpl implements UrlShortenerService {
             throw new IllegalStateException("Service already started");
         }
         this.dao = dao;
+    }
+
+    @Override
+    public void setKafkaBootstrapServers(String bootstrapServers) {
+        this.bootstrapServers = bootstrapServers;
     }
 }
